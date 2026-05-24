@@ -40,7 +40,7 @@ Each sibling repo adds this repo as a git submodule mounted at `./docs/`.
 ### One-time setup (done by repo maintainer)
 ```bash
 # Run inside each sibling repo (backend, frontend, model)
-git submodule add https://github.com/<org>/prior-mail-docs.git docs
+git submodule add https://github.com/PJK-GM095-PIJAK/prior-mail-docs.git docs
 git submodule update --init --recursive
 git add .gitmodules docs
 git commit -m "chore: add prior-mail-docs as submodule"
@@ -48,14 +48,14 @@ git commit -m "chore: add prior-mail-docs as submodule"
 
 ### After cloning a sibling repo
 ```bash
-git clone https://github.com/<org>/prior-mail-backend.git
+git clone https://github.com/PJK-GM095-PIJAK/prior-mail-backend.git
 cd prior-mail-backend
 git submodule update --init --recursive
 ```
 
 Or shorter, when first cloning:
 ```bash
-git clone --recurse-submodules https://github.com/<org>/prior-mail-backend.git
+git clone --recurse-submodules https://github.com/PJK-GM095-PIJAK/prior-mail-backend.git
 ```
 
 ### Pulling the latest docs in a sibling repo
