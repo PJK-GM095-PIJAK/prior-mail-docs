@@ -10,8 +10,8 @@ PriorMail uses three model components. Two are owned and trained by us (`prior-m
 
 | Component | Type | Owned by us | Notes |
 |---|---|---|---|
-| Priority classifier | IndoBERT fine-tuned, 4-class | ✅ Yes | Trained in `prior-mail-model` |
-| Phishing detector | IndoBERT fine-tuned, binary | ✅ Yes | Trained in `prior-mail-model` |
+| Priority classifier | DistilBERT fine-tuned, 4-class | ✅ Yes | Trained in `prior-mail-model` |
+| Phishing detector | DistilBERT fine-tuned, binary | ✅ Yes | Trained in `prior-mail-model` |
 | Summarizer + task extractor | Hosted LLM (decision TBD) | ❌ No (MVP) | API call from backend |
 
 ---
@@ -22,7 +22,7 @@ PriorMail uses three model components. Two are owned and trained by us (`prior-m
 Given email subject + body, predict one of: `urgent`, `high`, `normal`, `low`.
 
 ### Architecture
-- Base model: `indobenchmark/indobert-base-p1` (BERT-base, 110M parameters, pretrained on Indonesian)
+- Base model: `distilbert-base-uncased` (DistilBERT, 66M parameters, English)
 - Classification head: linear layer (768 → 4) on `[CLS]` token output
 - Tokenizer: WordPiece from the base model
 - Max sequence length: **512 tokens** (truncate from the end; subject prepended to body with a `[SEP]`)
@@ -45,7 +45,7 @@ Preprocessing (in `src/data/preprocess.py`):
 |---|---|---|
 | `jason23322/high-accuracy-email-classifier` | Initial signal (mapped to our 4-class scheme) | full set |
 | `indobenchmark/indonlu` (sentiment subsets) | Indonesian language warm-up | use as auxiliary |
-| Internal labeled set | Domain adaptation for Indonesian work email | 500+ samples by Week 3 |
+| Internal labeled set | Domain adaptation for work email | 500+ samples by Week 3 |
 
 ### Class Mapping
 The external dataset's categories are mapped to our 4 classes by Insan + Faiz; mapping is fixed in `src/data/loaders.py` and documented in a comment block at the top of that file.
@@ -77,7 +77,7 @@ The external dataset's categories are mapped to our 4 classes by Insan + Faiz; m
 Given email subject + body + sender info, predict `is_phishing: bool` with a calibrated score.
 
 ### Architecture
-- Base model: `indobenchmark/indobert-base-p1` (decision: also IndoBERT for consistency; revisit if multilingual is needed for English phishing samples)
+- Base model: `distilbert-base-uncased` (same as priority classifier for consistency)
 - Classification head: linear (768 → 2) → softmax → take phishing class probability
 - Max sequence length: 512 tokens
 
@@ -109,7 +109,7 @@ Because false negatives are far worse than false positives in phishing, the deci
 - **Inference latency p95 < 500 ms** per email on CPU
 
 ### Adversarial Testing
-Faiz owns a small set of adversarially crafted phishing examples (Indonesian-language, with realistic enterprise impersonation). These do **not** affect training metrics but every promoted version must be checked against them. Results logged separately in `eval/results/adversarial/`.
+Faiz owns a small set of adversarially crafted phishing examples (English-language, with realistic enterprise impersonation). These do **not** affect training metrics but every promoted version must be checked against them. Results logged separately in `eval/results/adversarial/`.
 
 ---
 
@@ -119,7 +119,7 @@ For MVP, we call a hosted LLM (Anthropic or OpenAI — final decision pending) f
 
 ### Prompts
 Lives in `prior-mail-backend/src/priormail/agents/prompts/`. Versioned with the codebase. Each prompt has:
-- A clear instruction in Indonesian
+- A clear instruction in English
 - 2–3 few-shot examples
 - A JSON schema the model must return
 
@@ -128,7 +128,7 @@ Lives in `prior-mail-backend/src/priormail/agents/prompts/`. Versioned with the 
 {
   "tasks": [
     {
-      "description": "string (Indonesian)",
+      "description": "string (English)",
       "due_date": "YYYY-MM-DD or null"
     }
   ]
@@ -212,7 +212,7 @@ This lets us swap implementations (HuggingFace, ONNX, etc.) without touching cal
 ## 7. Labeling Protocol (Internal Dataset)
 
 ### Goal
-500+ Indonesian work emails labeled by Week 3, split across priority classes.
+500+ English work emails labeled by Week 3, split across priority classes.
 
 ### Process
 1. Source emails (consented samples, synthetic, or carefully redacted real emails — see `SECURITY.md`)
@@ -228,7 +228,7 @@ JSONL files in `prior-mail-model/data/labeled/`:
 
 ### Privacy
 - No raw user emails in this dataset without explicit consent + PII redaction
-- PII redaction is destructive: names → `[NAMA]`, phone → `[TELEPON]`, addresses → `[ALAMAT]`, account numbers → `[NOMOR]`
+- PII redaction is destructive: names → `[NAME]`, phone → `[PHONE]`, addresses → `[ADDRESS]`, account numbers → `[NUMBER]`
 - Redaction reviewed by a second team member before commit
 
 ---
@@ -289,11 +289,11 @@ Every promoted version ships with a `model_card.md` containing at minimum:
 
 ## 11. Open Decisions
 
-- [ ] Phishing detector base model: IndoBERT (current default) vs multilingual BERT?
+- [x] Phishing detector base model: `distilbert-base-uncased` (decided; IndoBERT dropped — Indonesian data unavailable)
 - [ ] Class imbalance handling: focal loss vs class weights vs resampling?
 - [ ] Summarizer + task extractor: which hosted LLM? Or local model?
 - [ ] Long-emails (> 512 tokens): truncate vs sliding-window vs hierarchical?
 
 ---
 
-*Last updated: 2026-05-25*
+*Last updated: 2026-06-08*

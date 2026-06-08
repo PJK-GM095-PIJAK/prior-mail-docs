@@ -13,13 +13,13 @@
 
 ### Problem
 
-Knowledge workers receive hundreds of emails daily and spend significant time triaging their inbox. Important emails are missed, tasks go unidentified, and phishing risks add another layer of cognitive load. Existing tools rarely understand Indonesian-language email context well.
+Knowledge workers receive hundreds of emails daily and spend significant time triaging their inbox. Important emails are missed, tasks go unidentified, and phishing risks add another layer of cognitive load. Existing tools lack automated, intelligent triage that works on real-world email.
 
 ### Solution
 
-A web app that, for an Indonesian-speaking user's Gmail inbox, automatically:
+A web app that, for a user's Gmail inbox, automatically:
 
-1. Classifies each email by priority (`urgent` / `high` / `normal` / `low`) using fine-tuned IndoBERT
+1. Classifies each email by priority (`urgent` / `high` / `normal` / `low`) using fine-tuned DistilBERT
 2. Detects phishing attempts
 3. Summarizes content
 4. Extracts actionable tasks and deadlines
@@ -27,7 +27,7 @@ A web app that, for an Indonesian-speaking user's Gmail inbox, automatically:
 
 ### Research Questions
 
-1. How effective is fine-tuned IndoBERT for priority classification and phishing detection of Indonesian-language email?
+1. How effective is fine-tuned DistilBERT for priority classification and phishing detection of email?
 2. How does a LangGraph multi-agent pipeline improve summarization and task extraction quality?
 3. What is the measurable impact of the PriorMail dashboard on email triage time and response time to high-priority email?
 
@@ -37,7 +37,7 @@ A web app that, for an Indonesian-speaking user's Gmail inbox, automatically:
 
 | Member | ID | Role |
 |---|---|---|
-| Insan Anshary Rasul | APC000D6Y0267 | Core AI & Documentation Lead — IndoBERT fine-tuning, model deployment, scraping API |
+| Insan Anshary Rasul | APC000D6Y0267 | Core AI & Documentation Lead — DistilBERT fine-tuning, model deployment, scraping API |
 | Syafiq Sadidul Azmi | APC001D6Y0210 | AI Workflow & Infrastructure Specialist — Gmail API, FastAPI backend, Render deployment |
 | Mochamad Chairulridjal Nurvikri | APC001D6Y0328 | Frontend & Intelligent UI Lead — Next.js dashboard, LangGraph agents |
 | Faiz Naufal Huda | APC001D6Y0331 | AI Security & Evaluation Lead — phishing detection, LangGraph agents |
@@ -77,7 +77,7 @@ A web app that, for an Indonesian-speaking user's Gmail inbox, automatically:
 
 ### In Scope (MVP)
 - Gmail API integration (`gmail.readonly` scope only)
-- Priority classification (4 classes, IndoBERT fine-tuned)
+- Priority classification (4 classes, DistilBERT fine-tuned)
 - Phishing detection (binary)
 - Summarization + task extraction via LangGraph pipeline
 - Dashboard with priority sorting, summaries, task list
@@ -99,7 +99,7 @@ A web app that, for an Indonesian-speaking user's Gmail inbox, automatically:
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
 | 1 | Gmail API issues (quota, auth, rate limits) | Medium | High | Start integration in Week 2; cache aggressively; use `historyId` delta sync |
-| 2 | IndoBERT accuracy below target in available training time | Medium | Medium | Transfer learning + augmentation; ship baseline as fallback |
+| 2 | DistilBERT accuracy below target in available training time | Medium | Medium | Transfer learning + augmentation; ship baseline as fallback |
 | 3 | LangGraph multi-agent flow too complex for 5 weeks | High | Medium | Start with single agent; add complexity incrementally |
 | 4 | Team member blocked or behind schedule | Medium | High | Clear ownership; sync every 2 days in group chat |
 | 5 | Deployment issues (Render or Supabase) | Low | Medium | Dockerize early; test deployment in Week 4 |
@@ -113,7 +113,7 @@ A web app that, for an Indonesian-speaking user's Gmail inbox, automatically:
 
 - **Backend:** Python 3.11, FastAPI, SQLAlchemy 2 async, Pydantic v2, LangGraph
 - **Frontend:** Node.js 20, Next.js 15 (App Router), React 19, Tailwind 4, TanStack Query, Auth.js
-- **ML:** PyTorch 2.x, Hugging Face Transformers, IndoBERT (`indobenchmark/indobert-base-p1`)
+- **ML:** PyTorch 2.x, Hugging Face Transformers, DistilBERT (`distilbert-base-uncased`)
 - **Data:** Supabase (Postgres 15 + Auth + Storage)
 - **Hosting:** Vercel (frontend), Render (backend + worker), Supabase (database)
 
@@ -142,4 +142,4 @@ The project is considered successful when:
 
 ---
 
-*Last updated: 2026-05-25*
+*Last updated: 2026-06-08*

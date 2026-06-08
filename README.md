@@ -10,7 +10,7 @@ This repo is the **single source of truth** for cross-repo concerns: API contrac
 |---|---|---|
 | [`prior-mail-backend`](../prior-mail-backend) | FastAPI + Gmail + LangGraph | `./docs/` |
 | [`prior-mail-frontend`](../prior-mail-frontend) | Next.js dashboard | `./docs/` |
-| [`prior-mail-model`](../prior-mail-model) | IndoBERT training + phishing detection | `./docs/` |
+| [`prior-mail-model`](../prior-mail-model) | DistilBERT training + phishing detection | `./docs/` |
 
 ## CLAUDE.md Templates
 

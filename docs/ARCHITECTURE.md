@@ -6,7 +6,7 @@
 
 ## 1. System Overview
 
-PriorMail is a 3-tier web app: Next.js client → FastAPI server → Postgres database, with Gmail as the external source and IndoBERT models running in-process on the FastAPI side.
+PriorMail is a 3-tier web app: Next.js client → FastAPI server → Postgres database, with Gmail as the external source and DistilBERT models running in-process on the FastAPI side.
 
 ```mermaid
 graph TB
@@ -68,7 +68,7 @@ graph TB
 
 ### Hosted LLM API (TBD)
 - **Decision pending:** Anthropic vs OpenAI vs self-hosted (see Open Decisions)
-- **Used for:** summarization + task extraction (NOT for priority classification or phishing detection — those use our IndoBERT models)
+- **Used for:** summarization + task extraction (NOT for priority classification or phishing detection — those use our DistilBERT models)
 
 ---
 
@@ -119,7 +119,7 @@ START
   ↓
 [preprocess]           normalize text, strip HTML, language detect
   ↓
-[classify_priority] ∥ [detect_phishing]    (parallel; both IndoBERT models)
+[classify_priority] ∥ [detect_phishing]    (parallel; both DistilBERT models)
   ↓
 [summarize]            LLM call: 2-3 sentence summary
   ↓
@@ -274,4 +274,4 @@ LLMs and humans: do not assume an answer. These are tracked here and resolved vi
 
 ---
 
-*Last updated: 2026-05-25*
+*Last updated: 2026-06-08*
