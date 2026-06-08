@@ -44,7 +44,6 @@ Preprocessing (in `src/data/preprocess.py`):
 | Dataset | Use | Size target |
 |---|---|---|
 | `jason23322/high-accuracy-email-classifier` | Initial signal (mapped to our 4-class scheme) | full set |
-| `indobenchmark/indonlu` (sentiment subsets) | Indonesian language warm-up | use as auxiliary |
 | Internal labeled set | Domain adaptation for work email | 500+ samples by Week 3 |
 
 ### Class Mapping
