@@ -183,19 +183,21 @@ PRIORITY_MODEL_URI=supabase://models/priority/v1.3/
 PHISHING_MODEL_URI=supabase://models/phishing/v1.0/
 ```
 
-The URI points to the directory; the backend downloads all required files on startup.
+The URI points to the directory; the backend downloads all required files on startup. Supabase Storage is used **only for model checkpoints** — there is no Postgres database or Auth.
 
 ### Loading Behavior
 - Models loaded **once** at FastAPI lifespan startup
 - Failed download or load → app refuses to start (logs the failure, exits non-zero)
-- After successful load, the model version string is exposed at `GET /api/v1/_health/models` for observability
+- After successful load, the model version string is exposed at `GET /api/v1/health/models` for observability
 
-### Per-Email Metadata
-On every successful classification, the backend writes `model_versions` to the `emails` table:
+### Per-Request Metadata
+On every successful classification, `model_versions` is included in the `AnalysisResult` response:
 ```json
 { "priority": "v1.3", "phishing": "v1.0" }
 ```
-This lets us trace which model version produced which output — important for retroactive analysis when a model changes.
+The frontend stores this alongside the email in `localStorage`. This lets us trace which model version produced which output if a version is later found to have issues.
+
+> There is no database write. The backend is fully stateless — it processes the request and returns the result; persistence is the frontend's responsibility.
 
 ### Inference Wrapping
 The backend wraps each model in a thin class implementing:
@@ -295,4 +297,4 @@ Every promoted version ships with a `model_card.md` containing at minimum:
 
 ---
 
-*Last updated: 2026-06-08*
+*Last updated: 2026-06-17*

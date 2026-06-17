@@ -17,19 +17,19 @@ Knowledge workers receive hundreds of emails daily and spend significant time tr
 
 ### Solution
 
-A web app that, for a user's Gmail inbox, automatically:
+A web app that lets a user upload any `.eml` email file and automatically:
 
-1. Classifies each email by priority (`urgent` / `high` / `normal` / `low`) using fine-tuned DistilBERT
-2. Detects phishing attempts
-3. Summarizes content
+1. Detects phishing attempts
+2. Classifies the email by priority (`urgent` / `high` / `normal` / `low`) using fine-tuned DistilBERT
+3. Summarizes the content
 4. Extracts actionable tasks and deadlines
-5. Surfaces all of this in a dashboard
+5. Surfaces all of this in a dashboard, persisted in the browser's `localStorage`
 
 ### Research Questions
 
 1. How effective is fine-tuned DistilBERT for priority classification and phishing detection of email?
 2. How does a LangGraph multi-agent pipeline improve summarization and task extraction quality?
-3. What is the measurable impact of the PriorMail dashboard on email triage time and response time to high-priority email?
+3. What is the measured accuracy and latency of the full pipeline on a realistic email test set?
 
 ---
 
@@ -37,9 +37,9 @@ A web app that, for a user's Gmail inbox, automatically:
 
 | Member | ID | Role |
 |---|---|---|
-| Insan Anshary Rasul | APC000D6Y0267 | Core AI & Documentation Lead — DistilBERT fine-tuning, model deployment, scraping API |
-| Syafiq Sadidul Azmi | APC001D6Y0210 | AI Workflow & Infrastructure Specialist — Gmail API, FastAPI backend, Render deployment |
-| Mochamad Chairulridjal Nurvikri | APC001D6Y0328 | Frontend & Intelligent UI Lead — Next.js dashboard, LangGraph agents |
+| Insan Anshary Rasul | APC000D6Y0267 | Core AI & Documentation Lead — DistilBERT fine-tuning, model deployment |
+| Syafiq Sadidul Azmi | APC001D6Y0210 | AI Workflow & Infrastructure Specialist — FastAPI backend, .eml parsing, Render deployment |
+| Mochamad Chairulridjal Nurvikri | APC001D6Y0328 | Frontend & Intelligent UI Lead — Next.js dashboard, localStorage integration, LangGraph agents |
 | Faiz Naufal Huda | APC001D6Y0331 | AI Security & Evaluation Lead — phishing detection, LangGraph agents |
 
 ### Code Ownership Quick Reference
@@ -58,9 +58,9 @@ A web app that, for a user's Gmail inbox, automatically:
 | Week | Focus | Key deliverables |
 |---|---|---|
 | 1 | Requirements + design | Project plan submitted (7 May), repo scaffolding, UI/UX mocks, initial spec docs |
-| 2 | Backend + frontend foundations | FastAPI skeleton, Supabase configured, Gmail OAuth working, Next.js shell |
+| 2 | Backend + frontend foundations | FastAPI skeleton, .eml parsing endpoint, Next.js shell with upload UI |
 | 3 | ML + integration | Priority classifier trained (baseline), LangGraph pipeline assembled, basic dashboard connected to API |
-| 4 | Integration + optimization | End-to-end flow working, performance tuning, debugging |
+| 4 | Integration + optimization | End-to-end flow working, localStorage persistence, performance tuning, debugging |
 | 5 | Final testing + delivery | Eval gates met, documentation finalized, presentation video (10 min), demo |
 
 ### Pijak Program Milestones
@@ -76,17 +76,21 @@ A web app that, for a user's Gmail inbox, automatically:
 ## 4. Scope
 
 ### In Scope (MVP)
-- Gmail API integration (`gmail.readonly` scope only)
-- Priority classification (4 classes, DistilBERT fine-tuned)
-- Phishing detection (binary)
-- Summarization + task extraction via LangGraph pipeline
+- `.eml` file upload interface (drag-and-drop + file picker)
+- Phishing detection (binary, DistilBERT fine-tuned) — runs first; stops pipeline on positive
+- Priority classification (4 classes, DistilBERT fine-tuned) — runs only if not phishing
+- Summarization + task extraction via LangGraph pipeline (hosted LLM)
 - Dashboard with priority sorting, summaries, task list
-- Single-user instance (each user connects their own Gmail)
+- Browser `localStorage` for persisting processed emails across page reloads
+- Clear-all option for local data
 
 ### Out of Scope (MVP)
+- Gmail API integration / OAuth / inbox sync
+- Any server-side user storage or database
+- User accounts or authentication
 - Auto-reply or email composition
 - Microsoft Outlook / Microsoft Graph integration
-- Multi-account support per user
+- Multi-account support
 - Enterprise SSO
 - Mobile native apps
 - Calendar integration
@@ -98,12 +102,14 @@ A web app that, for a user's Gmail inbox, automatically:
 
 | # | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
-| 1 | Gmail API issues (quota, auth, rate limits) | Medium | High | Start integration in Week 2; cache aggressively; use `historyId` delta sync |
-| 2 | DistilBERT accuracy below target in available training time | Medium | Medium | Transfer learning + augmentation; ship baseline as fallback |
-| 3 | LangGraph multi-agent flow too complex for 5 weeks | High | Medium | Start with single agent; add complexity incrementally |
-| 4 | Team member blocked or behind schedule | Medium | High | Clear ownership; sync every 2 days in group chat |
-| 5 | Deployment issues (Render or Supabase) | Low | Medium | Dockerize early; test deployment in Week 4 |
-| 6 | Privacy / PII handling errors | Low | High | `SECURITY.md` as enforced policy; audit log from day 1; minimum Gmail scope |
+| 1 | DistilBERT accuracy below target in available training time | Medium | Medium | Transfer learning + augmentation; ship baseline as fallback |
+| 2 | LangGraph multi-agent flow too complex for 5 weeks | High | Medium | Start with single agent; add complexity incrementally |
+| 3 | Team member blocked or behind schedule | Medium | High | Clear ownership; sync every 2 days in group chat |
+| 4 | Deployment issues (Render) | Low | Medium | Dockerize early; test deployment in Week 4 |
+| 5 | LLM API cost overrun for summarization | Low | Low | Use cheapest capable model; cache repeated identical inputs |
+| 6 | localStorage size limit hit during demo | Low | Low | Implement oldest-first eviction; strip body_text from old entries |
+
+> **Risk #1 from prior plan (Gmail API quota/auth issues) has been eliminated** by the switch to `.eml` upload.
 
 ---
 
@@ -111,11 +117,11 @@ A web app that, for a user's Gmail inbox, automatically:
 
 > Full versions and constraints in each repo's `CLAUDE.md`.
 
-- **Backend:** Python 3.11, FastAPI, SQLAlchemy 2 async, Pydantic v2, LangGraph
-- **Frontend:** Node.js 20, Next.js 15 (App Router), React 19, Tailwind 4, TanStack Query, Auth.js
+- **Backend:** Python 3.11, FastAPI, Pydantic v2, LangGraph
+- **Frontend:** Node.js 20, Next.js 15 (App Router), React 19, Tailwind 4, browser localStorage
 - **ML:** PyTorch 2.x, Hugging Face Transformers, DistilBERT (`distilbert-base-uncased`)
-- **Data:** Supabase (Postgres 15 + Auth + Storage)
-- **Hosting:** Vercel (frontend), Render (backend + worker), Supabase (database)
+- **Storage:** Supabase Storage only — used for storing trained model checkpoints; no Postgres, no Auth, no Vault
+- **Hosting:** Vercel (frontend), Render (backend)
 
 ---
 
@@ -135,11 +141,20 @@ The project is considered successful when:
 
 - [ ] Live deployed app (frontend on Vercel, backend on Render) accessible to demo users
 - [ ] All eval gates in `ML_PIPELINE.md` met for at least one promoted model version
-- [ ] At least one full end-to-end demo: connect Gmail → see classified inbox → see extracted tasks
+- [ ] At least one full end-to-end demo: upload `.eml` → see phishing/priority classification → see summary → see extracted tasks
 - [ ] Documentation complete: this `PROJECT_PLAN.md`, all referenced spec files, and a presentation deck
 - [ ] 10-minute demo video recorded
 - [ ] 360° feedback submitted
 
 ---
 
-*Last updated: 2026-06-08*
+## 9. Architecture Decision Log
+
+| Date | Decision | Rationale |
+|---|---|---|
+| 2026-06-17 | Dropped Gmail API; switched to `.eml` upload | Eliminated OAuth complexity, Supabase Vault, background sync workers, and external API quota risk. Core AI pipeline unchanged. Simplification justified given June 19 deadline. |
+| 2026-06-17 | Dropped server-side database; using browser localStorage | No user accounts needed for the capstone demo. Removes Supabase Postgres + Auth entirely. Data is per-browser, which is acceptable for the scope. |
+
+---
+
+*Last updated: 2026-06-17*

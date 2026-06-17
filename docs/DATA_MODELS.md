@@ -1,356 +1,154 @@
 # DATA_MODELS.md
 
-> Database schema, Pydantic models, and TypeScript types for PriorMail. This is the single source of truth for data shapes. If the database, backend code, or frontend code disagrees with this file, the code is wrong.
+> Data shapes for PriorMail. This is the single source of truth for request/response schemas and client-side storage types. There is no server-side database — all email data lives in the browser's `localStorage`. If backend Pydantic models or frontend TypeScript types disagree with this file, the code is wrong.
 
 ---
 
 ## 1. Overview
 
-Five Postgres tables in Supabase:
+PriorMail has no Postgres tables. All data shapes exist in two places:
 
-| Table | Purpose | Owner |
+| Layer | Location | Purpose |
 |---|---|---|
-| `users` | User profile + OAuth state | Backend |
-| `emails` | Classified emails with AI-derived fields | Backend |
-| `extracted_tasks` | Tasks extracted by the LangGraph pipeline | Backend |
-| `audit_log` | Every read/write of email content (compliance) | Backend |
-| `sync_jobs` | Tracks running sync jobs (prevents duplicates) | Backend (worker) |
-
-All tables use UUID primary keys (v4) and `timestamptz` for time fields.
-
-Row-level security (RLS) is enabled on **every** table — see §6.
+| Backend response schemas | Pydantic models in `prior-mail-backend/src/priormail/models/` | Defines what the API returns |
+| Frontend stored types | TypeScript + zod in `prior-mail-frontend/lib/types/` | Defines what goes into localStorage |
 
 ---
 
 ## 2. Enums
 
-These are defined as Postgres enums and mirrored in Pydantic (backend) and TypeScript (frontend).
+Defined in Pydantic (backend) and mirrored as `zod` enums (frontend).
 
 ### `priority_level`
 ```
 urgent | high | normal | low
 ```
+Used in `AnalysisResult.priority`. Will be `null` when `is_phishing` is `true`.
 
-### `audit_action`
-```
-read | classify | reclassify | delete | summarize
-```
-
-### `actor_type`
-```
-user | worker | agent
-```
-
-### `sync_job_status`
-```
-pending | running | completed | failed
-```
-
-> **Single source:** Postgres enums are authoritative. Backend mirrors via Pydantic; frontend mirrors via `zod` schemas in `types/enums.ts`.
+> **Single source:** Pydantic `StrEnum` in backend is authoritative. Frontend mirrors via `z.enum(...)` in `types/enums.ts`.
 
 ---
 
-## 3. Tables
+## 3. API Response Shape
 
-### 3.1 `users`
+### 3.1 `AnalysisResult`
 
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| `id` | uuid | PK, default `gen_random_uuid()` | Matches Supabase Auth `user.id` |
-| `email` | text | NOT NULL, UNIQUE | |
-| `display_name` | text | NULL | from Google profile |
-| `avatar_url` | text | NULL | |
-| `gmail_refresh_token` | text | NOT NULL | **Encrypted via Supabase Vault** |
-| `gmail_email` | text | NOT NULL | the Gmail account they connected (may differ from `email` in edge cases) |
-| `last_sync_history_id` | text | NULL | for Gmail delta sync |
-| `last_sync_at` | timestamptz | NULL | |
-| `created_at` | timestamptz | NOT NULL, default `now()` | |
-| `updated_at` | timestamptz | NOT NULL, default `now()` | trigger updates on row change |
-
-**Indexes:**
-- `users_pkey` on `id`
-- `users_email_key` on `email`
-
-### 3.2 `emails`
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| `id` | uuid | PK, default `gen_random_uuid()` | |
-| `user_id` | uuid | NOT NULL, FK → `users.id` ON DELETE CASCADE | |
-| `gmail_message_id` | text | NOT NULL | |
-| `thread_id` | text | NOT NULL | |
-| `subject` | text | NOT NULL, default `''` | empty string for blank subjects |
-| `sender_email` | text | NOT NULL | |
-| `sender_name` | text | NULL | |
-| `received_at` | timestamptz | NOT NULL | |
-| `snippet` | text | NOT NULL | first 200 chars, used in list views |
-| `body_hash` | text | NOT NULL | SHA-256 of normalized body |
-| `body_text` | text | NULL | full body; **auto-nulled after 30 days** |
-| `priority` | priority_level | NOT NULL | |
-| `priority_confidence` | real | NOT NULL, CHECK 0 ≤ x ≤ 1 | |
-| `is_phishing` | boolean | NOT NULL, default false | |
-| `phishing_score` | real | NOT NULL, CHECK 0 ≤ x ≤ 1 | |
-| `summary` | text | NULL | LLM-generated |
-| `model_versions` | jsonb | NOT NULL, default `{}` | e.g. `{"priority":"v1.3","phishing":"v1.0"}` |
-| `processed_at` | timestamptz | NULL | when LangGraph pipeline finished |
-| `created_at` | timestamptz | NOT NULL, default `now()` | |
-| `updated_at` | timestamptz | NOT NULL, default `now()` | |
-
-**Constraints:**
-- `UNIQUE (user_id, gmail_message_id)` — same message can't be ingested twice per user
-
-**Indexes:**
-- `emails_pkey` on `id`
-- `emails_user_received_idx` on `(user_id, received_at DESC)` — for list query
-- `emails_user_priority_idx` on `(user_id, priority, received_at DESC)` — for filtered list
-- `emails_user_phishing_idx` on `(user_id, is_phishing) WHERE is_phishing = true` — partial index
-
-### 3.3 `extracted_tasks`
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| `id` | uuid | PK, default `gen_random_uuid()` | |
-| `user_id` | uuid | NOT NULL, FK → `users.id` ON DELETE CASCADE | denormalized for RLS |
-| `email_id` | uuid | NOT NULL, FK → `emails.id` ON DELETE CASCADE | |
-| `description` | text | NOT NULL | |
-| `due_date` | date | NULL | |
-| `completed` | boolean | NOT NULL, default false | |
-| `completed_at` | timestamptz | NULL | set when `completed` flips to true |
-| `created_at` | timestamptz | NOT NULL, default `now()` | |
-| `updated_at` | timestamptz | NOT NULL, default `now()` | |
-
-**Indexes:**
-- `tasks_pkey` on `id`
-- `tasks_user_completed_due_idx` on `(user_id, completed, due_date NULLS LAST)`
-- `tasks_email_idx` on `email_id`
-
-### 3.4 `audit_log`
-
-Append-only. Never updated, never deleted (except via `DELETE /api/v1/account` cascade).
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| `id` | uuid | PK, default `gen_random_uuid()` | |
-| `user_id` | uuid | NOT NULL, FK → `users.id` ON DELETE CASCADE | |
-| `email_id` | uuid | NULL, FK → `emails.id` ON DELETE SET NULL | |
-| `action` | audit_action | NOT NULL | |
-| `actor` | actor_type | NOT NULL | |
-| `actor_detail` | text | NULL | e.g. `"agent:classify"` |
-| `metadata` | jsonb | NOT NULL, default `{}` | |
-| `created_at` | timestamptz | NOT NULL, default `now()` | |
-
-**Indexes:**
-- `audit_pkey` on `id`
-- `audit_user_created_idx` on `(user_id, created_at DESC)`
-
-### 3.5 `sync_jobs`
-
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| `id` | uuid | PK, default `gen_random_uuid()` | |
-| `user_id` | uuid | NOT NULL, FK → `users.id` ON DELETE CASCADE | |
-| `status` | sync_job_status | NOT NULL, default `'pending'` | |
-| `started_at` | timestamptz | NULL | |
-| `finished_at` | timestamptz | NULL | |
-| `processed_count` | integer | NOT NULL, default 0 | |
-| `error` | text | NULL | populated on failure |
-| `created_at` | timestamptz | NOT NULL, default `now()` | |
-
-**Constraints:**
-- Partial unique index: `CREATE UNIQUE INDEX sync_jobs_user_active_idx ON sync_jobs (user_id) WHERE status IN ('pending', 'running')` — prevents two active jobs per user
-
----
-
-## 4. Background Jobs (Postgres-side)
-
-### Body retention cleanup
-Daily job (cron via Supabase or worker-scheduled):
-
-```sql
-UPDATE emails
-SET body_text = NULL, updated_at = now()
-WHERE body_text IS NOT NULL
-  AND received_at < now() - interval '30 days';
-```
-
-`body_hash` is **kept** so reprocessing can detect "we've already seen this content" if needed (but reprocessing without body itself fails — see `email.body_expired` error code).
-
----
-
-## 5. Triggers
-
-### `updated_at` auto-update
-Apply to `users`, `emails`, `extracted_tasks`, `sync_jobs`:
-```sql
-CREATE TRIGGER set_updated_at
-BEFORE UPDATE ON <table>
-FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-```
-
-### `task.completed_at` auto-set
-On `extracted_tasks`, when `completed` flips true, set `completed_at = now()`. When it flips false, set to NULL.
-
----
-
-## 6. Row-Level Security (RLS)
-
-**All tables have RLS enabled.** Backend uses the service role key (which bypasses RLS) only inside trusted server code. Frontend uses the anon/authenticated role and is therefore subject to RLS.
-
-### Universal policy
-For all tables: a row is visible to / writable by the user whose `user_id` matches `auth.uid()`.
-
-```sql
--- Example for emails
-CREATE POLICY "users_own_emails" ON emails
-FOR ALL
-USING (user_id = auth.uid())
-WITH CHECK (user_id = auth.uid());
-```
-
-> Even though MVP doesn't query Supabase directly from the frontend (all data goes through the backend), RLS is enabled as defense in depth. The Realtime channels rely on it.
-
----
-
-## 7. Pydantic Models (backend)
-
-Located in `prior-mail-backend/src/priormail/models/`. Examples below; full models in code.
+Returned by `POST /api/v1/emails/analyze`.
 
 ```python
-# models/enums.py
-from enum import StrEnum
-
-class Priority(StrEnum):
-    URGENT = "urgent"
-    HIGH = "high"
-    NORMAL = "normal"
-    LOW = "low"
-
-class AuditAction(StrEnum):
-    READ = "read"
-    CLASSIFY = "classify"
-    RECLASSIFY = "reclassify"
-    DELETE = "delete"
-    SUMMARIZE = "summarize"
-```
-
-```python
-# models/email.py
-from datetime import datetime
+# models/analysis.py (backend)
+from datetime import datetime, date
 from pydantic import BaseModel, ConfigDict, Field
-from uuid import UUID
-from .enums import Priority
+from priormail.models.enums import Priority
 
-class EmailListItem(BaseModel):
-    """The shape returned by GET /api/v1/emails (list view)."""
+class ExtractedTask(BaseModel):
+    description: str
+    due_date: date | None
+
+class AnalysisResult(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
-    gmail_message_id: str
-    thread_id: str
     subject: str
     sender_email: str
     sender_name: str | None
-    received_at: datetime
-    snippet: str
-    priority: Priority
-    priority_confidence: float = Field(ge=0, le=1)
+    received_at: datetime | None
+    snippet: str                               # first 200 chars of body
+    body_text: str
     is_phishing: bool
     phishing_score: float = Field(ge=0, le=1)
-    has_summary: bool
-    task_count: int
-    processed_at: datetime | None
-
-class EmailDetail(EmailListItem):
-    """The shape returned by GET /api/v1/emails/{id}."""
-    body_text: str | None
-    summary: str | None
-    tasks: list["TaskItem"]
+    priority: Priority | None                  # null when is_phishing=True
+    priority_confidence: float = Field(ge=0, le=1)
+    summary: str | None                        # null when is_phishing=True
+    tasks: list[ExtractedTask]                 # empty when is_phishing=True
+    processed_at: datetime
+    model_versions: dict[str, str]             # e.g. {"priority": "v1.3", "phishing": "v1.0"}
 ```
-
-Naming convention:
-- `*Item` / `*Detail` — read shapes for API responses
-- `*Create` — write shapes for create requests
-- `*Update` — write shapes for partial updates (all fields optional)
-- `*DB` — internal shape mirroring DB row (rarely exposed)
 
 ---
 
-## 8. TypeScript Types (frontend)
+## 4. Frontend / localStorage Types
 
-Located in `prior-mail-frontend/types/`. **Field names must match Pydantic models exactly.**
+### 4.1 Zod schemas
 
 ```ts
-// types/enums.ts
+// lib/types/enums.ts
 import { z } from "zod";
 
 export const Priority = z.enum(["urgent", "high", "normal", "low"]);
 export type Priority = z.infer<typeof Priority>;
-
-export const PRIORITY_VALUES = Priority.options;
 ```
 
 ```ts
-// types/email.ts
+// lib/types/email.ts
 import { z } from "zod";
 import { Priority } from "./enums";
 
-export const EmailListItem = z.object({
-  id: z.string().uuid(),
-  gmail_message_id: z.string(),
-  thread_id: z.string(),
+export const ExtractedTask = z.object({
+  description: z.string(),
+  due_date: z.string().nullable(),   // "YYYY-MM-DD" or null
+});
+export type ExtractedTask = z.infer<typeof ExtractedTask>;
+
+export const AnalysisResult = z.object({
   subject: z.string(),
-  sender_email: z.string().email(),
+  sender_email: z.string(),
   sender_name: z.string().nullable(),
-  received_at: z.string().datetime(),
+  received_at: z.string().datetime().nullable(),
   snippet: z.string(),
-  priority: Priority,
-  priority_confidence: z.number().min(0).max(1),
+  body_text: z.string(),
   is_phishing: z.boolean(),
   phishing_score: z.number().min(0).max(1),
-  has_summary: z.boolean(),
-  task_count: z.number().int().nonnegative(),
-  processed_at: z.string().datetime().nullable(),
-});
-export type EmailListItem = z.infer<typeof EmailListItem>;
-
-export const EmailDetail = EmailListItem.extend({
-  body_text: z.string().nullable(),
+  priority: Priority.nullable(),
+  priority_confidence: z.number().min(0).max(1),
   summary: z.string().nullable(),
-  tasks: z.array(TaskItem),
+  tasks: z.array(ExtractedTask),
+  processed_at: z.string().datetime(),
+  model_versions: z.record(z.string()),
 });
-export type EmailDetail = z.infer<typeof EmailDetail>;
+export type AnalysisResult = z.infer<typeof AnalysisResult>;
 ```
 
-> Frontend should parse API responses through these schemas at the boundary (in the API client). Failures should surface as user-visible errors, not silent crashes.
+### 4.2 `StoredEmail` — what goes into localStorage
+
+The frontend wraps `AnalysisResult` with a client-assigned `id` and `uploaded_at` timestamp before persisting.
+
+```ts
+// lib/types/email.ts (continued)
+export const StoredEmail = AnalysisResult.extend({
+  id: z.string().uuid(),            // generated client-side before the API call
+  uploaded_at: z.string().datetime(), // ISO 8601, set client-side at upload time
+});
+export type StoredEmail = z.infer<typeof StoredEmail>;
+```
+
+### 4.3 localStorage layout
+
+```
+localStorage key: "priormail_emails"
+value: JSON.stringify(StoredEmail[])   // newest first
+```
+
+- Parse at startup with `StoredEmail.array().parse(...)`.
+- On parse failure (corrupt data), reset to `[]` and show a non-blocking warning.
+- **Size target:** keep under 4 MB. If `body_text` causes the limit to be approached, the frontend may strip `body_text` from older entries automatically (oldest-first eviction).
 
 ---
 
-## 9. Migration Guidelines
+## 5. Pydantic Naming Conventions (backend)
 
-- Every schema change = a new Alembic migration file in `prior-mail-backend/alembic/versions/`
-- File naming: `YYYYMMDD_HHMM_<short_description>.py`
-- **Always** include `downgrade()`. If irreversible, write `pass` with a comment explaining why.
-- After merging a migration:
-  1. Update this file with the new schema
-  2. Update Pydantic models in backend
-  3. Update TypeScript types + zod schemas in frontend
-  4. Bump the docs submodule in both backend and frontend
-
-### Backward-compatibility rules
-
-- **Adding a column:** safe; default to `NULL` or a literal so existing rows are valid.
-- **Removing a column:** two-step. (1) Stop writing to it. Ship. (2) Drop in a later migration.
-- **Renaming a column:** never. Add a new column, dual-write, migrate readers, drop old column.
-- **Changing an enum value:** never remove or rename. Only add.
+- `*Result` — read shapes returned in API responses
+- `*Create` / `*Update` — write shapes (currently only `AnalysisResult` is exposed)
+- `*State` — LangGraph pipeline state (internal, never serialised to HTTP)
 
 ---
 
-## 10. Changelog
+## 6. Changelog
 
 | Date | Change | By |
 |---|---|---|
-| 2026-05-25 | Initial schema | Team |
+| 2026-05-25 | Initial schema (Postgres tables, Supabase) | Team |
+| 2026-06-17 | Full rewrite: removed all Postgres tables (users, emails, extracted_tasks, audit_log, sync_jobs); replaced with API response shape + localStorage StoredEmail type | Team |
 
 ---
 
-*Last updated: 2026-05-25*
+*Last updated: 2026-06-17*
