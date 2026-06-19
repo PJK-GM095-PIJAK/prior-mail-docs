@@ -122,6 +122,8 @@
 = Bagian 0 — Sekilas PriorMail
 // ===========================================================================
 
+== Deskripsi Singkat Proyek
+
 *PriorMail* adalah asisten email berbasis AI yang membantu pengguna mentriase
 inbox secara otomatis. Setiap email diproses oleh sebuah _pipeline_ cerdas yang
 melakukan empat hal sekaligus:
@@ -175,11 +177,82 @@ Semua bagian PriorMail dikelola di satu organisasi GitHub *PJK-GM095-PIJAK*.
   [`prior-mail-model`], link("https://github.com/PJK-GM095-PIJAK/prior-mail-model")[/prior-mail-model], [Training],
   [`prior-mail-label`], link("https://github.com/PJK-GM095-PIJAK/prior-mail-label")[/prior-mail-label], [Pelabelan],
   [`prior-mail-docs`], link("https://github.com/PJK-GM095-PIJAK/prior-mail-docs")[/prior-mail-docs], [Spec bersama],
-  [Model (HF Hub)], link("https://huggingface.co/insanar/priormail-priority")[huggingface.co/insanar/priormail-priority], [DistilBERT v2.0],
-  [Dataset (HF Hub)], link("https://huggingface.co/datasets/insanar/prior-mail-priority")[datasets/insanar/prior-mail-priority], [4 kelas],
+  [Model Phishing (HF Hub)], link("https://huggingface.co/faizhuda/priormail-phishing")[huggingface.co/faizhuda/priormail-phishing], [DistilBERT v2.1],
+  [Model Priority (HF Hub)], link("https://huggingface.co/insanar/priormail-priority")[huggingface.co/insanar/priormail-priority], [DistilBERT v3.0],
+  [Dataset Sintesis (HF Hub)], link("https://huggingface.co/datasets/insanar/prior-mail-priority")[datasets/insanar/prior-mail-priority], [4 kelas],
 )
 #v(2pt)
 // #text(size: 0.8em, fill: pm-muted)[Ganti `[https://prior-mail-frontend-228vrcwfl-teaguy.vercel.app/]` dengan alamat _deployment_ Vercel Anda yang sebenarnya.]
+
+== Tautan Model
+
+PriorMail menggunakan dua model *DistilBERT* yang di-publish di *HuggingFace Hub*.
+Model ini diunduh *otomatis* saat backend pertama kali dijalankan melalui variabel
+`PRIORITY_MODEL_URI` — tidak perlu unduh manual untuk menjalankan aplikasi.
+
+#table(
+  columns: (auto, 1fr, auto),
+  align: (left + horizon, left + horizon, center + horizon),
+  stroke: 0.5pt + pm-line,
+  inset: (x: 8pt, y: 7pt),
+  fill: (col, row) => if row == 0 { pm-primary } else if calc.odd(row) { pm-soft } else { white },
+  table.header(
+    ..([Model], [Tautan Unduhan (HuggingFace Hub)], [Versi]).map(c =>
+      text(fill: white, weight: "bold", size: 0.9em)[#c])
+  ),
+  [*Priority Classifier*],
+  link("https://huggingface.co/insanar/priormail-priority")[huggingface.co/insanar/priormail-priority],
+  [v3.0],
+  [*Dataset Prioritas*],
+  link("https://huggingface.co/datasets/insanar/prior-mail-priority")[datasets/insanar/prior-mail-priority],
+  [4 kelas],
+  [*Model Phsihing Detection*],
+  link("https://huggingface.co/faizhuda/priormail-phishing")[https://huggingface.co/faizhuda/priormail-phishing],[v2.1]
+)
+#v(4pt)
+
+== Tautan Dataset
+
+#table(
+  columns: (auto, 1fr),
+  align: (left + horizon, left + horizon, center + horizon),
+  stroke: 0.5pt + pm-line,
+  inset: (x: 8pt, y: 7pt),
+  fill: (col, row) => if row == 0 { pm-primary } else if calc.odd(row) { pm-soft } else { white },
+  table.header(
+    ..([Dataset], [Tautan Unduhan (HuggingFace Hub)]).map(c =>
+      text(fill: white, weight: "bold", size: 0.9em)[#c])
+  ),
+  [*Priority Phishing*],
+  link("https://huggingface.co/datasets/ealvaradob/phishing-dataset/tree/main")[datasets/ealvaradob/phishing-dataset],
+  [*Dataset Prioritas*],
+  link("https://huggingface.co/datasets/insanar/prior-mail-priority")[datasets/insanar/prior-mail-priority],
+)
+#v(4pt)
+
+Untuk *mengunduh model secara manual* (mis. untuk inferensi _offline_):
+
+```bash
+pip install huggingface_hub
+huggingface-cli download insanar/priormail-priority --local-dir ./models/priority
+```
+
+Untuk *memuat model di Python* (inferensi langsung, di luar backend):
+
+```python
+from transformers import pipeline
+
+clf = pipeline("text-classification", model="insanar/priormail-priority")
+result = clf("Meeting tomorrow at 9AM — please confirm.")
+# → [{'label': 'high', 'score': 0.91}]
+```
+
+#callout(kind: "info", title: "Model dimuat otomatis saat backend start")[
+  Bila Anda menjalankan backend sesuai Bagian 3, tidak perlu mengunduh model
+  secara manual. Backend membaca `PRIORITY_MODEL_URI=hf://insanar/priormail-priority/v3.0`
+  dari `.env.local` dan mengunduh semua file checkpoint (~475 MB) saat pertama
+  kali dijalankan, lalu men-cache-nya untuk start berikutnya.
+]
 
 // ===========================================================================
 = Bagian 1 — Cara Tercepat: Pakai Aplikasi yang Sudah Online
@@ -193,6 +266,8 @@ ter-deploy* — tidak perlu memasang apa pun.
   atau Firefox). Aplikasi langsung menampilkan dashboard inbox bergaya Gmail.
 ]
 
+
+#pagebreak()
 == Mencoba Alur Demo
 
 Di _toolbar_ atas tersedia tiga tombol skenario. Klik salah satunya untuk
@@ -236,8 +311,10 @@ Setelah menekan tombol, perhatikan urutan yang sengaja dibuat menyerupai inbox n
     pertama mungkin butuh beberapa detik untuk "membangunkan" backend — ini normal.
 ]
 
+
+#pagebreak()
 // ===========================================================================
-= Bagian 2 — Prasyarat (untuk Menjalankan Sendiri)
+= Bagian 2 — Petunjuk Setup Environment
 // ===========================================================================
 
 Bagian ini hanya diperlukan bila Anda ingin *menjalankan PriorMail di komputer
@@ -268,7 +345,7 @@ sendiri* atau men-deploy ulang. Pasang alat berikut terlebih dahulu:
 ]
 
 // ===========================================================================
-= Bagian 3 — Menjalankan Secara Lokal
+= Bagian 3 — Cara Menjalankan Aplikasi
 // ===========================================================================
 
 Inti aplikasi terdiri atas *backend* (FastAPI) dan *frontend* (Next.js).
@@ -306,7 +383,7 @@ make dev                          # uvicorn di http://localhost:8000
 Isi `.env.local` minimal seperti ini:
 
 ```bash
-PRIORITY_MODEL_URI=hf://insanar/priormail-priority/v2.0
+PRIORITY_MODEL_URI=hf://insanar/priormail-priority/v3.0
 GROQ_API_KEY=<kunci-groq-anda>
 CORS_ORIGINS=http://localhost:3000,http://localhost:5173
 ```
@@ -335,6 +412,7 @@ PRIORMAIL_BACKEND_URL=http://localhost:8000
 # Opsi B — pakai backend yang sudah online
 # PRIORMAIL_BACKEND_URL=https://pjk-gm095-priormail-model.hf.space
 
+# Apabila ingin di-upload di huggingface
 HF_TOKEN=<token-huggingface-anda>
 ```
 
@@ -346,7 +424,7 @@ HF_TOKEN=<token-huggingface-anda>
 == 3.4 · Verifikasi
 
 #steps(
-  [Cek backend hidup — buka #link("http://localhost:8000/api/v1/_health/models")[`http://localhost:8000/api/v1/_health/models`]; harus mengembalikan versi model (mis. `{"data":{"priority":"v2.0"}, ...}`).],
+  [Cek backend hidup — buka #link("http://localhost:8000/api/v1/_health/models")[`http://localhost:8000/api/v1/_health/models`]; harus mengembalikan versi model (mis. `{"data":{"priority":"v3.0"}, ...}`).],
   [Buka #link("http://localhost:3000")[`http://localhost:3000`] di browser.],
   [Klik tombol *Good*, *Moderate*, lalu *Phishing* di _toolbar_.],
   [Pastikan setiap email muncul lebih dulu, menampilkan status _analyzing_, lalu digantikan hasil klasifikasi.],
@@ -370,8 +448,8 @@ git clone --recurse-submodules https://github.com/PJK-GM095-PIJAK/prior-mail-mod
 cd prior-mail-model
 make install                                   # pasang dependensi via uv
 make data                                      # unduh + praolah dataset prioritas
-make train config=configs/priority_v2.yaml     # fine-tuning DistilBERT
-make eval  config=configs/priority_v2.yaml     # jalankan eval gate
+make train config=configs/priority_v3.yaml     # fine-tuning DistilBERT
+make eval  config=configs/priority_v3.yaml     # jalankan eval gate
 ```
 
 Sebuah checkpoint baru hanya dipromosikan bila *lolos eval gate*:
